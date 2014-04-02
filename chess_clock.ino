@@ -20,8 +20,13 @@
 #define LCD_BACKLIGHT_OFF()     digitalWrite( LCD_BACKLIGHT_PIN, LOW )
 #define LCD_BACKLIGHT_ON()      digitalWrite( LCD_BACKLIGHT_PIN, HIGH )
 #define LCD_BACKLIGHT(state)    { if( state ){digitalWrite( LCD_BACKLIGHT_PIN, HIGH );}else{digitalWrite( LCD_BACKLIGHT_PIN, LOW );} }
-byte buttonWas          = BUTTON_NONE;   //used by ReadButtons() for detection of button events
-boolean flag = true;
+
+int timer1_counter;
+int leftClockInSec;
+int rightClockInSec;
+boolean leftButtonPressed;
+boolean rightButtonPressed;
+
 LiquidCrystal lcd( 8, 9, 4, 5, 6, 7 );
 
 void setup()
@@ -30,28 +35,79 @@ void setup()
   lcd.print("hello, buttons!");
    //button adc input
    pinMode( BUTTON_ADC_PIN, INPUT );         //ensure A0 is an input
-   digitalWrite( BUTTON_ADC_PIN, LOW );      //ensure pullup is off on A0  
+   digitalWrite( BUTTON_ADC_PIN, LOW );      //ensure pullup is off on A0
+   // setup timer
+   leftClockInSec = 0;
+   rightClockInSec = 0;
+   leftButtonPressed = true;
+   rightButtonPressed = false;
+  // initialize timer1 
+  noInterrupts();           // disable all interrupts
+  TCCR1A = 0;
+  TCCR1B = 0;
+
+  // Set timer1_counter to the correct value for our interrupt interval
+  //timer1_counter = 64886;   // preload timer 65536-16MHz/256/100Hz
+  //timer1_counter = 64286;   // preload timer 65536-16MHz/256/50Hz
+  //timer1_counter = 34286;   // preload timer 65536-16MHz/256/2Hz
+  timer1_counter = 17143;
+  
+  TCNT1 = timer1_counter;   // preload timer
+  TCCR1B |= (1 << CS12);    // 256 prescaler 
+  TIMSK1 |= (1 << TOIE1);   // enable timer overflow interrupt
+  interrupts();             // enable all interrupts   
+   
+}
+
+ISR(TIMER1_OVF_vect)        // interrupt service routine 
+{
+  String leftSec = "0";
+  String rightSec = "0";
+  String leftMin = "0";
+  String rightMin = "0";  
+  int minutes = 0;
+  TCNT1 = timer1_counter;   // preload timer  
+  if(leftButtonPressed){
+     leftClockInSec++;
+     if(leftClockInSec==60) {
+       minutes++;
+       leftClockInSec = 0;
+     }
+  leftSec = String(leftClockInSec);
+  leftMin = String(minutes);  
+  } else {
+     rightClockInSec++;
+     if(rightClockInSec==60) {
+       minutes++;
+       rightClockInSec = 0;
+     }
+  rightSec = String(rightClockInSec);
+  rightMin = String(minutes);
+  }
+  
+  lcd.clear();
+  lcd.print (leftMin + ":" + leftSec + "         "+ rightMin + ":" + rightSec);
 }
 
 void loop()
 {
    byte button;
-   byte timestamp;
    button = ReadButtons();
   if(button == BUTTON_LEFT) {
-     lcd.clear();     
-     lcd.print ("hello, left!");    
+    leftButtonPressed = true;
+    rightButtonPressed = false;
+    leftClockInSec = 0;
   }
   if ( button == BUTTON_RIGHT) {
-    lcd.clear();
-    lcd.print("hello, right!");
+    leftButtonPressed = false;
+    rightButtonPressed = true;
+    rightClockInSec = 0;
    }
 }
 
 /*--------------------------------------------------------------------------------------
   ReadButtons()
   Detect the button pressed and return the value
-  Uses global values buttonWas, buttonJustPressed, buttonJustReleased.
 --------------------------------------------------------------------------------------*/
 byte ReadButtons()
 {
@@ -70,9 +126,5 @@ byte ReadButtons()
    {
       button = BUTTON_LEFT;
    }
-
-   //save the latest button value, for change event detection next time round
-   buttonWas = button;
-   
    return( button );
 }
