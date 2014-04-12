@@ -1,2 +1,4 @@
 Chess clock for Arduino Uno ...
 work in progess :)
+
+Currently Fischer 5 seconds is supported. 

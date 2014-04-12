@@ -31,15 +31,13 @@ LiquidCrystal lcd( 8, 9, 4, 5, 6, 7 );
 
 void setup()
 {
-  lcd.begin(16, 2);
-  lcd.print("hello, buttons!");
    //button adc input
    pinMode( BUTTON_ADC_PIN, INPUT );         //ensure A0 is an input
    digitalWrite( BUTTON_ADC_PIN, LOW );      //ensure pullup is off on A0
    // setup timer
-   leftClockInSec = 0;
-   rightClockInSec = 0;
-   leftButtonPressed = true;
+   leftClockInSec = 300; // 5 minutes Fischer
+   rightClockInSec = 300; // 5 minutes Fischer
+   leftButtonPressed = false;
    rightButtonPressed = false;
   // initialize timer1 
   noInterrupts();           // disable all interrupts
@@ -55,38 +53,36 @@ void setup()
   TCNT1 = timer1_counter;   // preload timer
   TCCR1B |= (1 << CS12);    // 256 prescaler 
   TIMSK1 |= (1 << TOIE1);   // enable timer overflow interrupt
-  interrupts();             // enable all interrupts   
+  interrupts();             // enable all interrupts    
    
 }
 
-ISR(TIMER1_OVF_vect)        // interrupt service routine 
-{
-  String leftSec = "0";
-  String rightSec = "0";
-  String leftMin = "0";
-  String rightMin = "0";  
-  int minutes = 0;
-  TCNT1 = timer1_counter;   // preload timer  
-  if(leftButtonPressed){
-     leftClockInSec++;
-     if(leftClockInSec==60) {
-       minutes++;
-       leftClockInSec = 0;
-     }
-  leftSec = String(leftClockInSec);
-  leftMin = String(minutes);  
-  } else {
-     rightClockInSec++;
-     if(rightClockInSec==60) {
-       minutes++;
-       rightClockInSec = 0;
-     }
-  rightSec = String(rightClockInSec);
-  rightMin = String(minutes);
+String showTime(int timeInSeconds) {
+  int minutes = int(timeInSeconds/60);
+  int seconds = timeInSeconds-60*minutes;
+  String minutes_text = String(minutes);
+  String seconds_text = String(seconds);
+  if(minutes<10) {
+    minutes_text = '0' + minutes_text;
   }
+  if(seconds<10) {
+    seconds_text = '0' + seconds_text;
+  }
+  return String(minutes_text + ":" + seconds_text);
+}
+
+ISR(TIMER1_OVF_vect)        // interrupt service routine 
+{  
+  TCNT1 = timer1_counter;   // preload timer  
+  if((rightButtonPressed)&&(leftClockInSec>0)) { 
+    leftClockInSec--;
+  }
+  if((leftButtonPressed)&&(rightClockInSec>0)) {
+     rightClockInSec--;
+  }     
   
   lcd.clear();
-  lcd.print (leftMin + ":" + leftSec + "         "+ rightMin + ":" + rightSec);
+  lcd.print (showTime(leftClockInSec) + "    "+ showTime(rightClockInSec));
 }
 
 void loop()
@@ -94,15 +90,13 @@ void loop()
    byte button;
    button = ReadButtons();
   if(button == BUTTON_LEFT) {
-    leftButtonPressed = true;
-    rightButtonPressed = false;
-    leftClockInSec = 0;
+      leftButtonPressed = true;
+      rightButtonPressed = false;      
   }
-  if ( button == BUTTON_RIGHT) {
-    leftButtonPressed = false;
-    rightButtonPressed = true;
-    rightClockInSec = 0;
-   }
+  if (button == BUTTON_RIGHT) {    
+      rightButtonPressed = true;
+      leftButtonPressed = false;
+  }
 }
 
 /*--------------------------------------------------------------------------------------
@@ -119,11 +113,17 @@ byte ReadButtons()
    //sense if the voltage falls within valid voltage windows
    if( buttonVoltage < ( RIGHT_10BIT_ADC + BUTTONHYSTERESIS ) )
    {
+     if(leftButtonPressed){
+       leftClockInSec += 5; // add 5 seconds - Fischer       
+     } 
       button = BUTTON_RIGHT;
    }
    else if(   buttonVoltage >= ( LEFT_10BIT_ADC - BUTTONHYSTERESIS )
            && buttonVoltage <= ( LEFT_10BIT_ADC + BUTTONHYSTERESIS ) )
    {
+     if(rightButtonPressed){
+       rightClockInSec += 5; // add 5 seconds - Fischer     
+     }
       button = BUTTON_LEFT;
    }
    return( button );
