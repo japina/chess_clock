@@ -7,3 +7,7 @@ CHANGE LOG
 
 21. April 2014
 Added menu to select clock type and reading of the other keys (up, down, select)
+
+28. April 2014
+Early alpha of chess clock - some rough edges and not sure if clocks follow the logic of "proper" clocks.
+Discussion needed.

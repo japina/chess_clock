@@ -20,6 +20,9 @@
 #define LCD_BACKLIGHT_OFF()     digitalWrite( LCD_BACKLIGHT_PIN, LOW )
 #define LCD_BACKLIGHT_ON()      digitalWrite( LCD_BACKLIGHT_PIN, HIGH )
 #define LCD_BACKLIGHT(state)    { if( state ){digitalWrite( LCD_BACKLIGHT_PIN, HIGH );}else{digitalWrite( LCD_BACKLIGHT_PIN, LOW );} }
+#define BRONSTEIN_DELAY_TIME 5 // delay time in seconds
+#define SIMPLE_DELAY_TIME 5 // delay time in s
+#define HOUR_GLASS_DIFF 60 // difference in seconds
 #define FISCHER 0
 #define BRONSTEIN_DELAY 1
 #define SIMPLE_DELAY 2
@@ -28,16 +31,22 @@
 #define ARRAY_SIZE 5
 
 int timer1_counter;
+int delay_timer;
 int leftClockInSec;
 int rightClockInSec;
+int prevLeftClockInSec;
+int prevRightClockInSec;
+
 boolean leftButtonPressed;
 boolean rightButtonPressed;
 boolean downButtonPressed;
 boolean upButtonPressed;
 boolean selectButtonPressed;
 boolean showMenuFlag;
+boolean timeOutFlag;
 boolean refresh;
 boolean doIncrement;
+boolean clockStarted;
 int pos=0;
 
 
@@ -84,12 +93,14 @@ void setup()
   leftButtonPressed = false;
   rightButtonPressed = false;
   doIncrement = true;
+  timeOutFlag = false;
   startClock();
    
 }
 
 void startClock(){
-  // initialize timer1 
+  // initialize timer1
+  clockStarted=true;
   noInterrupts();           // disable all interrupts
   TCCR1A = 0;
   TCCR1B = 0;
@@ -104,6 +115,17 @@ void startClock(){
   TCCR1B |= (1 << CS12);    // 256 prescaler 
   TIMSK1 |= (1 << TOIE1);   // enable timer overflow interrupt
   interrupts();             // enable all interrupts
+}
+
+void stopClock(){
+  clockStarted=false;
+  // initialize timer1 
+  noInterrupts();           // disable all interrupts
+  TCCR1A = 0;
+  TCCR1B = 0;
+  TIMSK1 |= (0 << TOIE1);   // enable timer overflow interrupt
+  interrupts();             // enable all interrupts
+
 }
 
 String showTime(int timeInSeconds) {
@@ -123,13 +145,65 @@ String showTime(int timeInSeconds) {
 ISR(TIMER1_OVF_vect)        // interrupt service routine 
 {  
   TCNT1 = timer1_counter;   // preload timer  
-  if((rightButtonPressed)&&(leftClockInSec>0)) { 
-    leftClockInSec--;
+  switch(pos){
+    case SIMPLE_DELAY:
+      if(delay_timer>0) {
+        delay_timer--;
+      } else {
+        if((rightButtonPressed)&&(leftClockInSec>0)) { 
+          leftClockInSec--;
+        }
+        if((leftButtonPressed)&&(rightClockInSec>0)) {
+           rightClockInSec--;
+        }   
+      }
+      break;
+    case OVERTIME_PENALTY:
+      if((leftClockInSec==0)||(rightClockInSec==0)){
+        timeOutFlag = true;
+      }
+      if((rightButtonPressed)&&(timeOutFlag==true)) { 
+        leftClockInSec++;
+      }
+      if((leftButtonPressed)&&(timeOutFlag==true)) {
+         rightClockInSec++;
+      }  
+      if((rightButtonPressed)&&(leftClockInSec>0)&&(!timeOutFlag)) { 
+        leftClockInSec--;
+      }
+      if((leftButtonPressed)&&(rightClockInSec>0)&&(!timeOutFlag)) {
+         rightClockInSec--;
+      }   
+      break;
+     case HOUR_GLASS:
+       if((rightButtonPressed)&&(leftClockInSec>0)) { 
+         leftClockInSec--;
+       }
+       if((leftButtonPressed)&&(rightClockInSec>0)) {
+          rightClockInSec--;
+       }   
+     
+       if((leftClockInSec-rightClockInSec) >= HOUR_GLASS_DIFF){
+         stopClock();         
+         lcd.clear();
+         lcd.print ("Left lost");
+       }  
+       if((rightClockInSec-leftClockInSec) >= HOUR_GLASS_DIFF){
+         stopClock();         
+         lcd.clear();
+         lcd.print ("Right lost");
+       }  
+
+       break;
+     default: 
+        if((rightButtonPressed)&&(leftClockInSec>0)) { 
+          leftClockInSec--;
+        }
+        if((leftButtonPressed)&&(rightClockInSec>0)) {
+           rightClockInSec--;
+        }   
   }
-  if((leftButtonPressed)&&(rightClockInSec>0)) {
-     rightClockInSec--;
-  }   
-  if(!showMenuFlag) {
+  if((!showMenuFlag)&&(clockStarted)) {
      lcd.clear();
      lcd.print (showTime(leftClockInSec) + "    "+ showTime(rightClockInSec));
   }
@@ -138,6 +212,7 @@ ISR(TIMER1_OVF_vect)        // interrupt service routine
 void loop()
 {
    byte button;
+   int diff;
    
    if(showMenuFlag){
     if(refresh){
@@ -147,21 +222,54 @@ void loop()
    }
    
    button = ReadButtons();
-   // check if button is pressed and released 
+   // check if button is pressed and released  
   if((leftButtonPressed) && (button == BUTTON_NONE)) {
     if(doIncrement){
-      rightClockInSec += 5; // for Fischer
+      switch(pos){
+        case FISCHER:
+          rightClockInSec += 5; // for Fischer
+          break;
+        case BRONSTEIN_DELAY:
+          diff = prevRightClockInSec-rightClockInSec;
+          if( diff < BRONSTEIN_DELAY_TIME){
+            rightClockInSec += diff;
+            prevRightClockInSec = rightClockInSec;
+          }        
+          break;
+        case SIMPLE_DELAY:
+          delay_timer = 5; // delay         
+          break; 
+        case OVERTIME_PENALTY:
+          timeOutFlag=false;
+          break;
+      }
       doIncrement=false;
     }
-  }
+  } 
   
   if((rightButtonPressed) && (button == BUTTON_NONE)) {
     if(doIncrement){
-      leftClockInSec += 5; // for Fischer
+      switch(pos){
+        case FISCHER:
+          leftClockInSec += 5; // for Fischer
+          break;
+        case BRONSTEIN_DELAY:
+          diff = prevLeftClockInSec-leftClockInSec;
+          if( diff < BRONSTEIN_DELAY_TIME){
+            leftClockInSec += diff;
+            prevLeftClockInSec = leftClockInSec;
+          }        
+          break;
+        case SIMPLE_DELAY:
+          delay_timer = 5; // delay         
+          break; 
+        case OVERTIME_PENALTY:
+          timeOutFlag=false;
+          break;          
+      }
       doIncrement=false;
     }
-
-  }
+  } 
   
   if((downButtonPressed) && (button == BUTTON_NONE)) { //pressed down and released
     refresh=true;
@@ -177,8 +285,35 @@ void loop()
     // set up for the chess clock depending on the pos !!!!
     showMenuFlag=false;
    // setup timer
-   leftClockInSec = 300; // 5 minutes Fischer
-   rightClockInSec = 300; // 5 minutes Fischer  
+   switch(pos) {
+     case FISCHER:
+       leftClockInSec = 300; // 5 minutes Fischer
+       rightClockInSec = 300; // 5 minutes Fischer  
+       break;
+     case BRONSTEIN_DELAY:
+     // start clock with new settings
+       leftClockInSec = 305; // 5:05
+       rightClockInSec = 305; // 5:05
+       prevLeftClockInSec = leftClockInSec;
+       prevRightClockInSec = rightClockInSec;
+       //startClock();
+       break;
+     case SIMPLE_DELAY:
+       leftClockInSec = 300; // 5 minutes Simple delay
+       rightClockInSec = 300; // 5 minutes Simple delay       
+       break;
+     case OVERTIME_PENALTY:
+       leftClockInSec = 300; // 5 minutes Overtime penalty
+       rightClockInSec = 300; // 5 minutes Overtime penalty
+       break;
+     case HOUR_GLASS:
+       leftClockInSec = 300; // 5 minutes Hour glass
+       rightClockInSec = 300; // 5 minutes Hour glass                
+       break;
+     default:
+       leftClockInSec = 300; // 5 minutes Fischer
+       rightClockInSec = 300; // 5 minutes Fischer           
+   }
    selectButtonPressed=false;  
     
   }
