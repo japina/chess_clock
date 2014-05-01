@@ -5,9 +5,14 @@ Currently Fischer 5 seconds is supported.
 
 CHANGE LOG
 
-21. April 2014
-Added menu to select clock type and reading of the other keys (up, down, select)
+
+1. May 2014
+Corrected time interval. It is 1 sec now.
 
 28. April 2014
 Early alpha of chess clock - some rough edges and not sure if clocks follow the logic of "proper" clocks.
 Discussion needed.
+
+21. April 2014
+Added menu to select clock type and reading of the other keys (up, down, select)
+
