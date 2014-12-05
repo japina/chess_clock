@@ -345,7 +345,7 @@ byte ReadButtons()
       button = BUTTON_RIGHT;
    }
    // left
-   if(   buttonVoltage >= ( LEFT_10BIT_ADC - BUTTONHYSTERESIS )
+   if(   buttonVoltage > ( LEFT_10BIT_ADC - BUTTONHYSTERESIS )
            && buttonVoltage <= ( LEFT_10BIT_ADC + BUTTONHYSTERESIS ) )
    {
      leftButtonPressed=true;
